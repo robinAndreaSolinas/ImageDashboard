@@ -1,0 +1,13 @@
+services:
+  app:
+    build: .
+    env_file:
+      - .env
+    volumes:
+      - /var/job/data/db.sqlite:/app/db.sqlite
+    restart: on-failure:2
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 1G

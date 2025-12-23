@@ -1,0 +1,12 @@
+services:
+  pollimage:
+    build: .
+    ports:
+      - "8081:8081"
+    environment:
+      NODE_ENV: production
+      PORT: 8081
+      DB_PATH: /data/db.sqlite
+    volumes:
+      - /var/job/data/db.sqlite:/data/db.sqlite:ro
+    restart: unless-stopped
