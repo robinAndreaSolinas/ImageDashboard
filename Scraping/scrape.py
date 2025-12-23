@@ -3,24 +3,22 @@ import logging
 import os
 from datetime import datetime
 from typing import Iterable
-from urllib.parse import urlparse
-
 import pandas as pd
 from lxml import etree
 from io import BytesIO
 from PIL import Image
 import httpx
-from slack_sdk import WebClient, errors as slack_error
+from slack_sdk import WebClient
 import sqlite3
 from pathlib import Path
 import asyncio
 
 
 SITEMAP = [
-    'https://www.lanazione.it/feedservice/sitemap/generic/lan/2025/day/sitemap.xml',
-    'https://www.ilgiorno.it/feedservice/sitemap/generic/gio/2025/week/sitemap.xml',
-    'https://www.ilrestodelcarlino.it/feedservice/sitemap/generic/rdc/2025/month/sitemap.xml',
-    'https://www.quotidiano.net/feedservice/sitemap/generic/qn/2025/year/sitemap.xml',
+    f'https://www.lanazione.it/feedservice/sitemap/generic/lan/{datetime.year}/day/sitemap.xml',
+    f'https://www.ilgiorno.it/feedservice/sitemap/generic/gio/{datetime.year}/day/sitemap.xml',
+    f'https://www.ilrestodelcarlino.it/feedservice/sitemap/generic/rdc/{datetime.year}/day/sitemap.xml',
+    f'https://www.quotidiano.net/feedservice/sitemap/generic/qn/{datetime.year}/day/sitemap.xml',
 ]
 
 TABLE_NAME = 'article_image'
@@ -30,7 +28,7 @@ logger = logging.getLogger(__name__)
 slack_client = WebClient(os.getenv('SLACK_BOT_TOKEN'))
 
 http_client_params = {
-    # "http2": True,
+    "http2": True,
     "follow_redirects": True,
     "headers": {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36 (SeoAgent)",
@@ -68,17 +66,17 @@ def source_mapper(source):
         "ITALPRESS": "web-collaboratori",
         "ADN KRONOS": "web-collaboratori",
         "tgr": "web-collaboratori",
-        "fromHermes": "webcarta",
+        "fromHermes": "prepara per il web",
         "ULTIMORA_SPORT": "agenzie-ansa",
         "ULTIMORA_ECONOMIA": "agenzie-ansa",
         "ULTIMORA_NEWS": "agenzie-ansa",
         "carta": "carta",
         "aicarta": "carta-opti",
-        "aicarta-title": "carta-opti-title",
-        "aicarta-title-sum": "arta-opti-title-som",
+        "aicarta-titolo": "carta-opti-title",
+        "aicarta-titolo-desc": "carta-opti-title-som",
         "MGC": "MGC",
         "COLLABORATORI": "web-collaboratori",
-        "Synch da Polopoly": "webcarts-old",
+        "Synch da Polopoly": "vecchio prepara per il web",
         "Smart Holo": "web-collaboratori",
         "migration": "web",
         "santi": "MGC",
@@ -91,29 +89,36 @@ def source_mapper(source):
 
     return mapping.get(source, source)
 
+async def _fetch_url_with_semaphore(url, *, client, semaphore):
+    async with semaphore:
+        try:
+            return await client.get(url)
+        except httpx.HTTPError as e:
+            logger.error(f"{url} => Response Exception {e}")
+            return None
+
+async def _fetch_urls(urls:list[str], **kwargs):
+    semaphore = asyncio.Semaphore(75)
+    async with httpx.AsyncClient(**kwargs) as client:
+
+        tasks = [_fetch_url_with_semaphore(url, client=client, semaphore=semaphore) for url in urls]
+
+        responses = []
+
+        for response in  await asyncio.gather(*tasks, return_exceptions=True):
+            if response is not None:
+                try:
+                    response.raise_for_status()
+                    responses.append(response)
+                except httpx.HTTPError as exc:
+                    logger.error(f"{exc.request.url} => [Response Exception] {exc}")
+
+
+        return [response for response in responses if response is not None]
 
 def request_batch(urls, **kwargs):
-
-    async def fetch_url(url, semaphore, **client_kwargs):
-        async with semaphore:
-            try:
-                async with httpx.AsyncClient(**client_kwargs) as client:
-                    return await client.get(url)
-            except Exception as e:
-                logger.warning(f"Failed to fetch {url}: {e}")
-                return None
-
-    async def fetch_all(urls):
-        concurrency = kwargs.pop("concurrency", 20)
-        semaphore = asyncio.Semaphore(concurrency)
-        kwargs['timeout'] = httpx.Timeout(120.0, connect=10.0)
-
-        kwargs.update(http_client_params)
-        tasks = [fetch_url(url, semaphore, **kwargs) for url in urls]
-        responses = await asyncio.gather(*tasks)
-        return [r for r in responses if r is not None]
-
-    return asyncio.run(fetch_all(urls))
+    kwargs.update(http_client_params)
+    return asyncio.run(_fetch_urls(urls, **kwargs))
 
 def request_multiple(urls, **kwargs) -> Iterable[httpx.Response]:
     kwargs.update(http_client_params)
@@ -245,59 +250,4 @@ def run(db_path:str = None):
 
     df.to_sql('article_image', conn, if_exists='append', index=False)
 
-    notify_file(graph_count_images_per_day(), "C09HS60BRA9")
-
     return df
-
-
-import matplotlib.pyplot as plt
-
-def graph_count_images_per_day(print:bool = False):
-    cursor, conn = database_connection('db.sqlite')
-
-    QUERY = """
-    SELECT DISTINCT article_url, fetched_at
-    FROM article_image
-    WHERE DATE(fetched_at) >= DATE('now', '-7 days')
-"""
-
-    df = pd.read_sql(
-        "SELECT DISTINCT article_url, fetched_at FROM article_image WHERE DATE(fetched_at) >= DATE('now', '-7 days')",
-        conn)
-
-    # Estrai dominio in modo robusto
-    df['domain'] = df['article_url'].apply(lambda x: urlparse(x).netloc or x.split('/')[0])
-    df['fetched_at'] = pd.to_datetime(df['fetched_at']).dt.date
-
-    # Conta immagini uniche per dominio/giorno
-    df_agg = df.groupby(['fetched_at', 'domain']).size().reset_index(name='image_count')
-
-    # Pivot per avere ogni dominio come serie separata
-    pivot = df_agg.pivot(index="fetched_at", columns="domain", values="image_count").fillna(0)
-
-    # Plot matplotlib
-    plt.figure(figsize=(12, 6))
-    for domain in pivot.columns:
-        plt.plot(pivot.index, pivot[domain], label=domain)
-
-    plt.xlabel("Giorni")
-    plt.ylabel("Numero di immagini")
-    plt.title("Conteggio immagini per giorno, segmentato per dominio")
-    plt.xticks(rotation=45)
-    plt.legend()
-    plt.tight_layout()
-    if print:
-        plt.show()
-        return
-    else:
-        buffer = BytesIO()
-        plt.savefig(buffer, format='png')
-        buffer.seek(0)
-        return buffer
-
-def notify_file(file, channel, filename = "image", **kwargs):
-    try:
-        response = slack_client.files_upload_v2(channel=channel, file=file, filename=filename, title=filename)
-    except slack_error.SlackClientError as e:
-        logger.error(f"Error uploading file: {e}")
-        pass

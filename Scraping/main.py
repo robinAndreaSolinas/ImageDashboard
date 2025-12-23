@@ -1,8 +1,11 @@
+import logging
 import os, scrape
 from datetime import datetime
 
 from slack_sdk import WebClient
 import pandas as pd
+
+logging.basicConfig(level=logging.INFO)
 
 DB_NAME = 'db.sqlite'
 TABLE_ARTICLE = scrape.TABLE_NAME

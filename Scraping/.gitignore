@@ -22,7 +22,6 @@ build/
 .idea/
 
 # Test and coverage
-test/
 .pytest_cache/
 
 # Logs and databases
