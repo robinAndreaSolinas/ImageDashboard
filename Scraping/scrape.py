@@ -2,8 +2,8 @@ import json
 import logging
 import os
 from datetime import datetime
-from typing import Iterable
 import pandas as pd
+import slack_sdk.errors
 from lxml import etree
 from io import BytesIO
 from PIL import Image
@@ -15,10 +15,10 @@ import asyncio
 
 
 SITEMAP = [
-    f'https://www.lanazione.it/feedservice/sitemap/generic/lan/{datetime.year}/day/sitemap.xml',
-    f'https://www.ilgiorno.it/feedservice/sitemap/generic/gio/{datetime.year}/day/sitemap.xml',
-    f'https://www.ilrestodelcarlino.it/feedservice/sitemap/generic/rdc/{datetime.year}/day/sitemap.xml',
-    f'https://www.quotidiano.net/feedservice/sitemap/generic/qn/{datetime.year}/day/sitemap.xml',
+    f'https://www.lanazione.it/feedservice/sitemap/generic/lan/{datetime.now().year}/day/sitemap.xml',
+    f'https://www.ilgiorno.it/feedservice/sitemap/generic/gio/{datetime.now().year}/day/sitemap.xml',
+    f'https://www.ilrestodelcarlino.it/feedservice/sitemap/generic/rdc/{datetime.now().year}/day/sitemap.xml',
+    f'https://www.quotidiano.net/feedservice/sitemap/generic/qn/{datetime.now().year}/day/sitemap.xml',
 ]
 
 TABLE_NAME = 'article_image'
@@ -42,7 +42,7 @@ def notify(text:str, channel:str, **kwargs):
     if message.get('ok'):
         return message
     else:
-        raise Exception(f"Error: {message.get('error')}")
+        raise slack_sdk.errors.SlackClientError(f"Error: {message.get('error')}")
 
 def source_mapper(source):
     if not source:
@@ -109,22 +109,17 @@ async def _fetch_urls(urls:list[str], **kwargs):
             if response is not None:
                 try:
                     response.raise_for_status()
-                    responses.append(response)
+                    if response is not None:
+                        responses.append(response)
                 except httpx.HTTPError as exc:
                     logger.error(f"{exc.request.url} => [Response Exception] {exc}")
 
 
-        return [response for response in responses if response is not None]
+        return responses
 
 def request_batch(urls, **kwargs):
     kwargs.update(http_client_params)
     return asyncio.run(_fetch_urls(urls, **kwargs))
-
-def request_multiple(urls, **kwargs) -> Iterable[httpx.Response]:
-    kwargs.update(http_client_params)
-    with httpx.Client(**kwargs) as client:
-        for url in urls:
-            yield client.get(url)
 
 def get_document_from_url(url, parser):
     response = http_client.get(url)
@@ -161,16 +156,16 @@ def get_article(sitemap_url):
             continue
 
         try:
-            imgage_url = doc.xpath('//meta[@property="og:image"]/@content')[0]
-            image, weight = get_image(imgage_url)
+            image_url = doc.xpath('//meta[@property="og:image"]/@content')[0]
+            image, weight = get_image(image_url)
         except httpx.UnsupportedProtocol as e:
-            imgage_url = doc.xpath('//meta[@property="og:image"]/@content')[0]
+            image_url = doc.xpath('//meta[@property="og:image"]/@content')[0]
             logger.warning(f"{response.url} => Warning Image: {e}")
-            imgage_url = f'https://{imgage_url}'
-            image, weight = get_image(imgage_url)
+            image_url = f'https://{image_url}'
+            image, weight = get_image(image_url)
         except httpx.HTTPStatusError as e:
-            imgage_url = doc.xpath('//meta[@property="og:image"]/@content')[0]
-            notify(f"L'articolo {response.url} ha un [immagine che va in errore {e.response.status_code}]({imgage_url})'", "C09HS60BRA9")
+            image_url = doc.xpath('//meta[@property="og:image"]/@content')[0]
+            notify(f"L'articolo {response.url} ha un [immagine che va in errore {e.response.status_code}]({image_url})'", "C09HS60BRA9")
             logger.warning(f"{response.url} => Warning Image: {e}")
             continue
         except IndexError:
@@ -179,7 +174,7 @@ def get_article(sitemap_url):
 
         article_list.append({
             'article_url': str(response.url),
-            'image_url': str(imgage_url),
+            'image_url': str(image_url),
             'image_width': image.size[0],
             'image_height': image.size[1],
             'image_extension': image.format,
