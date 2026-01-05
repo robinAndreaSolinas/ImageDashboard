@@ -65,8 +65,61 @@ export const generateMockData = (count: number = 500): DataItem[] => {
   return data;
 };
 
+const CACHE_KEY = 'datascope_data_cache';
+const CACHE_DURATION = 60 * 60 * 1000; // 1 hour in milliseconds
+
+interface CacheEntry {
+  data: DataItem[];
+  timestamp: number;
+}
+
+const getCachedData = (): DataItem[] | null => {
+  try {
+    const cached = localStorage.getItem(CACHE_KEY);
+    if (!cached) return null;
+    
+    const entry: CacheEntry = JSON.parse(cached);
+    const now = Date.now();
+    const age = now - entry.timestamp;
+    
+    // Check if cache is still valid (less than 1 hour old)
+    if (age < CACHE_DURATION) {
+      console.log(`Using cached data (age: ${Math.round(age / 1000 / 60)} minutes)`);
+      return entry.data;
+    }
+    
+    // Cache expired, remove it
+    localStorage.removeItem(CACHE_KEY);
+    return null;
+  } catch (error) {
+    console.error('Error reading cache:', error);
+    return null;
+  }
+};
+
+const setCachedData = (data: DataItem[]): void => {
+  try {
+    const entry: CacheEntry = {
+      data,
+      timestamp: Date.now()
+    };
+    localStorage.setItem(CACHE_KEY, JSON.stringify(entry));
+    console.log('Data cached successfully');
+  } catch (error) {
+    console.error('Error saving cache:', error);
+  }
+};
+
 // Fetch real data from API
-export const fetchDataFromAPI = async (): Promise<DataItem[]> => {
+export const fetchDataFromAPI = async (forceRefresh: boolean = false): Promise<DataItem[]> => {
+  // Check cache first (unless forced refresh)
+  if (!forceRefresh) {
+    const cached = getCachedData();
+    if (cached) {
+      return cached;
+    }
+  }
+  
   try {
     const response = await fetch(`${API_URL}/api/data`);
     
@@ -77,14 +130,27 @@ export const fetchDataFromAPI = async (): Promise<DataItem[]> => {
     const result = await response.json();
     
     if (result.success && result.data) {
-      return result.data;
+      const data = result.data;
+      
+      // Save to cache with current timestamp
+      setCachedData(data);
+      
+      return data;
     } else {
       throw new Error('Invalid response format from API');
     }
   } catch (error) {
     console.error('Error fetching data from API:', error);
+    
+    // Try to use cache even if expired as fallback
+    const cached = getCachedData();
+    if (cached) {
+      console.log('Using expired cache as fallback');
+      return cached;
+    }
+    
     console.warn('Falling back to mock data');
-    // Fallback to mock data if API fails
+    // Last resort: mock data
     return generateMockData(800);
   }
 };

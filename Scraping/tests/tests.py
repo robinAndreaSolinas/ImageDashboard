@@ -1,4 +1,4 @@
-import unittest, re, pandas as pd
+import unittest, pandas as pd
 from unittest.mock import patch
 import scrape
 
@@ -15,6 +15,16 @@ class TestScrape(unittest.TestCase):
 
         for source, expected  in sources:
             self.assertEqual(expected, scrape.source_mapper(source))
+
+    @patch('scrape.notify', autospec=True)
+    def test_notify(self, mock_notify):
+        # Test caso di successo
+        mock_notify.return_value = {"ok": True}
+        self.assertEqual({"ok": True}, scrape.notify("test", "test"))
+
+        mock_notify.side_effect = scrape.slack_sdk.errors.SlackClientError("Slack error")
+
+        self.assertRaises(scrape.slack_sdk.errors.SlackClientError, scrape.notify, "test", "test")
 
     def test_database_connection(self):
         connection = scrape.database_connection('../db.sqlite')

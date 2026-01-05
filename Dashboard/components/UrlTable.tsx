@@ -1,7 +1,8 @@
 import React, { useMemo, useState, useEffect, UIEvent } from 'react';
-import { DataItem } from '../types';
-import { ExternalLink, ArrowLeft } from 'lucide-react';
+import { DataItem, QualityClass } from '../types';
+import { ExternalLink, ArrowLeft, AlertTriangle } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
+import { getQuality } from '../utils/analytics';
 
 interface Props {
   data: DataItem[];
@@ -9,7 +10,7 @@ interface Props {
   onBack?: () => void;
 }
 
-export const UrlTable: React.FC<Props> = ({ data, totalDayCount, onBack }) => {
+export const UrlTable: React.FC<Props> = React.memo(({ data, totalDayCount, onBack }) => {
   const sortedData = useMemo(
     () => [...data].sort((a, b) => a.domain.localeCompare(b.domain)),
     [data]
@@ -27,7 +28,7 @@ export const UrlTable: React.FC<Props> = ({ data, totalDayCount, onBack }) => {
     [sortedData, visibleCount]
   );
 
-  const handleScroll = (e: UIEvent<HTMLDivElement>) => {
+  const handleScroll = React.useCallback((e: UIEvent<HTMLDivElement>) => {
     const target = e.currentTarget;
     const threshold = 100; // px dal fondo
 
@@ -36,16 +37,17 @@ export const UrlTable: React.FC<Props> = ({ data, totalDayCount, onBack }) => {
         prev < sortedData.length ? Math.min(prev + 200, sortedData.length) : prev
       );
     }
-  };
+  }, [sortedData.length]);
 
-  const formatDateTime = (iso: string) => {
+  // Memoize formatDateTime to avoid recreating on every render
+  const formatDateTime = React.useCallback((iso: string) => {
     try {
       const d = parseISO(iso);
       return format(d, 'dd/MM/yyyy HH:mm');
     } catch {
       return iso;
     }
-  };
+  }, []);
 
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-lg">
@@ -90,16 +92,28 @@ export const UrlTable: React.FC<Props> = ({ data, totalDayCount, onBack }) => {
               <th className="px-4 py-2 w-1/3">URL</th>
               <th className="px-4 py-2">Source</th>
               <th className="px-4 py-2">Pubblicato</th>
+              <th className="px-4 py-2">Dimensioni</th>
               <th className="px-4 py-2">Fetched</th>
-              <th className="px-4 py-2">Img (px)</th>
               <th className="px-4 py-2">Peso</th>
               <th className="px-4 py-2">Video</th>
               <th className="px-4 py-2 text-right">Azione</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-800">
-            {visibleData.map((item) => (
-              <tr key={item.id} className="hover:bg-slate-800/40 transition-colors">
+            {visibleData.map((item) => {
+              const hasZeroWidth = item.image_width === 0;
+              // Pre-calculate quality only if needed
+              const quality = hasZeroWidth ? QualityClass.LOW : getQuality(item);
+              const qualityColor = hasZeroWidth 
+                ? 'bg-red-500/20 border-red-500/50 text-red-300'
+                : quality === QualityClass.LOW 
+                  ? 'bg-red-500/20 border-red-500/50 text-red-300'
+                  : quality === QualityClass.MEDIUM 
+                    ? 'bg-yellow-500/20 border-yellow-500/50 text-yellow-300'
+                    : 'bg-green-500/20 border-green-500/50 text-green-300';
+              
+              return (
+              <tr key={item.id} className={`hover:bg-slate-800/40 transition-colors border-l-4 ${hasZeroWidth ? 'border-red-500/50' : quality === QualityClass.LOW ? 'border-red-500/50' : quality === QualityClass.MEDIUM ? 'border-yellow-500/50' : 'border-green-500/50'}`}>
                 <td className="px-4 py-2 font-mono text-[11px] text-slate-400">
                   {item.domain}
                 </td>
@@ -120,13 +134,16 @@ export const UrlTable: React.FC<Props> = ({ data, totalDayCount, onBack }) => {
                 <td className="px-4 py-2 text-slate-400">
                   {formatDateTime(item.published_at)}
                 </td>
+                <td className="px-4 py-2">
+                  <span className={`font-mono text-[11px] px-2 py-0.5 rounded border inline-flex items-center gap-1 ${qualityColor}`}>
+                    {hasZeroWidth && <AlertTriangle className="w-3 h-3" />}
+                    {item.image_width}×{item.image_height}
+                  </span>
+                </td>
                 <td className="px-4 py-2 text-slate-400">
                   {formatDateTime(item.fetched_at)}
                 </td>
-                <td className="px-4 py-2 font-mono text-[11px]">
-                  {item.image_width}×{item.image_height}
-                </td>
-                <td className="px-4 py-2 text-rose-400 font-semibold">
+                <td className="px-4 py-2 text-slate-300 font-semibold">
                   {item.image_weight} KB
                 </td>
                 <td className="px-4 py-2 text-center">
@@ -151,14 +168,18 @@ export const UrlTable: React.FC<Props> = ({ data, totalDayCount, onBack }) => {
                   </a>
                 </td>
               </tr>
-            ))}
+            );
+            })}
             {sortedData.length === 0 && (
               <tr>
                 <td
                   colSpan={9}
-                  className="px-4 py-8 text-center text-slate-600"
+                  className="px-4 py-8 text-center"
                 >
-                  Nessun dato disponibile
+                  <div className="flex flex-col items-center gap-2">
+                    <p className="text-slate-400 text-sm">🔍 Nessun articolo trovato</p>
+                    <p className="text-slate-500 text-xs">Prova a modificare i filtri o selezionare un periodo diverso.</p>
+                  </div>
                 </td>
               </tr>
             )}
@@ -166,9 +187,12 @@ export const UrlTable: React.FC<Props> = ({ data, totalDayCount, onBack }) => {
               <tr>
                 <td
                   colSpan={9}
-                  className="px-4 py-4 text-center text-slate-500 text-[11px]"
+                  className="px-4 py-4 text-center"
                 >
-                  Scorri per caricare altre righe ({visibleData.length}/{sortedData.length})
+                  <div className="flex flex-col items-center gap-1">
+                    <p className="text-slate-400 text-xs font-medium">⬇️ Scorri per caricare altre righe</p>
+                    <p className="text-slate-500 text-[10px]">Visualizzate {visibleData.length} di {sortedData.length} articoli</p>
+                  </div>
                 </td>
               </tr>
             )}
@@ -177,6 +201,8 @@ export const UrlTable: React.FC<Props> = ({ data, totalDayCount, onBack }) => {
       </div>
     </div>
   );
-}
+});
+
+UrlTable.displayName = 'UrlTable';
 
 
