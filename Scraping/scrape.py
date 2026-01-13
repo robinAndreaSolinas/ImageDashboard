@@ -13,13 +13,16 @@ import sqlite3
 from pathlib import Path
 import asyncio
 
-
-SITEMAP = [
-    f'https://www.lanazione.it/feedservice/sitemap/lan/articles/{datetime.now().year}/day/sitemap.xml',
-    f'https://www.ilgiorno.it/feedservice/sitemap/gio/articles/{datetime.now().year}/day/sitemap.xml',
-    f'https://www.ilrestodelcarlino.it/feedservice/sitemap/rdc/articles/{datetime.now().year}/day/sitemap.xml',
-    f'https://www.quotidiano.net/feedservice/sitemap/qn/articles/{datetime.now().year}/day/sitemap.xml',
-]
+# SITEMAP = [
+#     f'https://www.lanazione.it/feedservice/sitemap/lan/articles/{datetime.now().year}/day/sitemap.xml',
+#     f'https://www.ilgiorno.it/feedservice/sitemap/gio/articles/{datetime.now().year}/day/sitemap.xml',
+#     f'https://www.ilrestodelcarlino.it/feedservice/sitemap/rdc/articles/{datetime.now().year}/day/sitemap.xml',
+#     f'https://www.quotidiano.net/feedservice/sitemap/qn/articles/{datetime.now().year}/day/sitemap.xml',
+#     f'https://www.quotidiano.net/feedservice/sitemap/qs/articles/{datetime.now().year}/day/sitemap.xml',
+#     f'https://www.quotidiano.net/feedservice/sitemap/luce/articles/{datetime.now().year}/day/sitemap.xml',
+# ]
+SITEMAP = ['https://www.quotidiano.net/feedservice/sitemap/{journal}/articles/{year}/day/sitemap.xml'.format(journal = j, year = datetime.now().year)
+           for j in ("lan", "gio", "rdc", "qn", "qs", "luce")]
 
 TABLE_NAME = 'article_image'
 

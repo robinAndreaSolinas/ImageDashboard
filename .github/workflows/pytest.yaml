@@ -1,0 +1,26 @@
+name: 'Python Unit Test'
+on: 
+  push: 
+    paths: 
+      - 'Scraping/**' 
+
+jobs: 
+  py_test: 
+    name: 'python UnitTest'
+    runs-on: ubuntu-latest 
+    defaults: 
+      run:
+        working-directory: Scraping
+    steps: 
+      - uses: actions/checkout@v6 
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: Scraping/requirements.txt
+      - name: Install Dependencies
+        run: |
+          pip install --upgrade pip 
+          pip install -r requirements.txt 
+      - name: Testing 
+        run: python -m unittest discover -s tests -p "*.py"
