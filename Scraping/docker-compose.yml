@@ -1,24 +1,13 @@
 services:
   app:
-    image: sollo/polling-image:latest
-    container_name: job-polling-image
+    build: sollo/polling-image:latest
+    container_name: pollimg
     env_file:
       - .env
     volumes:
-      - /var/job/data/db.sqlite:/app/db.sqlite #database in bind mount
+      - /var/job/data/db.sqlite:/app/db.sqlite
     restart: on-failure:2
     deploy:
-      replicas: 2
-      restart_policy:
-        condition: on-failure
-      labels:
-        com.example.description: "This label will appear on the web service"
-      update_config:
-        parallelism: 1
-        delay: 10s
-        order: stop-first
-        failure_action: rollback
-        monitor: 10s
       resources:
         limits:
           cpus: "1"

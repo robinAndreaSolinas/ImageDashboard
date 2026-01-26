@@ -13,6 +13,7 @@ import sqlite3
 from pathlib import Path
 import asyncio
 
+SITEMAP_FORMAT='https://www.quotidiano.net/feedservice/sitemap/{journal}/articles/{year}/day/sitemap.xml'
 # SITEMAP = [
 #     f'https://www.lanazione.it/feedservice/sitemap/lan/articles/{datetime.now().year}/day/sitemap.xml',
 #     f'https://www.ilgiorno.it/feedservice/sitemap/gio/articles/{datetime.now().year}/day/sitemap.xml',
@@ -21,8 +22,7 @@ import asyncio
 #     f'https://www.quotidiano.net/feedservice/sitemap/qs/articles/{datetime.now().year}/day/sitemap.xml',
 #     f'https://www.quotidiano.net/feedservice/sitemap/luce/articles/{datetime.now().year}/day/sitemap.xml',
 # ]
-SITEMAP = ['https://www.quotidiano.net/feedservice/sitemap/{journal}/articles/{year}/day/sitemap.xml'.format(journal = j, year = datetime.now().year)
-           for j in ("lan", "gio", "rdc", "qn", "qs", "luce")]
+SITEMAP = [SITEMAP_FORMAT.format(journal = j, year = datetime.now().year) for j in ("lan", "gio", "rdc", "qn", "qs", "luce")]
 
 TABLE_NAME = 'article_image'
 
@@ -152,6 +152,7 @@ def get_article(sitemap_url):
     article_list = []
     article_url_list = extract_article_url_from_sitemap(sitemap_url)
 
+    #TODO: PRIMA DI FARE IL FETCH DI OGNI ARTICOLO, ELIMINA QUELLI GIÀ PRESENTI NEL DB.(url + day)
     for response in request_batch(article_url_list):
         doc = etree.fromstring(response.content, etree.HTMLParser(remove_blank_text=True, recover=True))
         if doc is None:
