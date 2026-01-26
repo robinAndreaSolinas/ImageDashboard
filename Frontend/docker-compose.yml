@@ -1,0 +1,27 @@
+services:
+  pollimage:
+    build: .
+#    ports:
+#      - "8081:8081"
+    container_name: front_pollimage
+    networks:
+      - default
+      - proxynet
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.pollimage.rule=Host(`dashboard.robinweb.it`)"
+      - "traefik.http.routers.app-custom.entrypoints=https"
+      - "traefik.http.routers.app-custom.tls=true"
+      - "traefik.http.routers.app-custom.tls.certresolver=cloudflare"
+      - "traefik.http.services.app-custom.loadbalancer.server.port=80"
+    environment:
+      NODE_ENV: production
+      PORT: 8081
+      DB_PATH: /data/db.sqlite
+    volumes:
+      - /var/job/data/db.sqlite:/data/db.sqlite:ro
+    restart: unless-stopped
+
+networks:
+  proxynet:
+    external: true
