@@ -21,13 +21,24 @@ build/
 # IDE
 .idea/
 
-# Test and coverage
+# Tests
+tests/
 .pytest_cache/
+
+# Git
+.git/
+.gitignore
+
+# Local files and secrets
+local/
+secret/
 
 # Logs and databases
 *.log
 *.sqlite
 *.db
 
-secret/
-local/
+# Docker files (avoid recursion)
+Dockerfile
+docker-compose.yml
+.dockerignore

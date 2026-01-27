@@ -9,7 +9,6 @@ class TestScrape(unittest.TestCase):
             self.assertIsNotNone(sitemap)
             self.assertIn("/202", sitemap)
 
-
     def test_source_mapper(self):
         sources = ((None, "web"),("", "web"), ("aicarta", "carta-opti"), ("carta", "carta"), ("pippo", "pippo"), ("fromHermes", "prepara per il web"))
 
