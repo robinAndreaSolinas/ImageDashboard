@@ -2,8 +2,6 @@ import json
 import logging
 import os
 from datetime import datetime
-from itertools import count
-
 import pandas as pd
 import slack_sdk.errors
 from lxml import etree
