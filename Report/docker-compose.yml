@@ -1,0 +1,18 @@
+services:
+  app:
+    build: .
+    image: sollo/carta-report:latest
+    container_name: carta-report
+    env_file:
+      - .env
+    volumes:
+      - /var/job/data/db.sqlite:/app/db.sqlite
+      - ./config.toml:/app/config.toml:ro
+      - ./templates:/app/templates:ro
+      - ./queries:/app/queries:ro
+    restart: on-failure:2
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M

@@ -1,0 +1,3 @@
+# Cron separato dal scraping. TZ host o CRON_TZ=Europe/Rome
+# Ogni ora dalle 12 alle 20: il container invia solo se carta è a 0 da 2 ore e non è già partito oggi.
+0 12-20 * * * cd /var/job/Report && docker compose run --rm --no-deps app

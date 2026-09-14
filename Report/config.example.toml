@@ -1,0 +1,28 @@
+# method = "sendmail"  mail diretta via MTA locale (/usr/sbin/sendmail)
+# method = "smtp"      relay SMTP classico (host/user/password)
+
+[email]
+method = "sendmail"
+sendmail_path = "/usr/sbin/sendmail"
+from_addr = "report@example.com"
+to = ["redazione@example.com", "altro@example.com"]
+cc = []
+bcc = []
+subject = "Report import carta — %data%"
+template_path = "templates/carta_morning.html"
+
+# Solo se method = "smtp"
+smtp_host = "smtp.example.com"
+smtp_port = 587
+use_tls = true
+smtp_user = "user@example.com"
+smtp_password_env = "SMTP_PASSWORD"
+
+[report]
+timezone = "Europe/Rome"
+after_hour = 12
+idle_hours = 2
+source = "carta"
+median_days = 14
+idle_query_path = "queries/carta_idle.sql"
+report_query_path = "queries/carta_report.sql"

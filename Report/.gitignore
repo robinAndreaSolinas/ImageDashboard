@@ -1,0 +1,15 @@
+venv/
+env/
+ENV/
+.env
+.venv
+.env*
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.log
+*.sqlite
+*.db
+secret/
+local/
+config.toml

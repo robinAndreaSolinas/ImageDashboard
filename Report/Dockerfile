@@ -6,8 +6,11 @@ WORKDIR /app
 COPY requirements.txt .
 
 RUN apk update && apk upgrade && \
-pip install -v --no-cache -r requirements.txt
+    apk add --no-cache tzdata postfix && \
+    pip install -v --no-cache -r requirements.txt
 
 COPY . .
+
+ENV TZ=Europe/Rome
 
 CMD ["python", "main.py"]
