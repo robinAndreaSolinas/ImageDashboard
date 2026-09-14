@@ -23,6 +23,7 @@ services:
       - pollimage_default
     labels:
       - "traefik.enable=true"
+      - "traefik.docker.network=proxynet"
       - "traefik.http.routers.pollimage.rule=Host(`dashboard.robinweb.it`)"
       - "traefik.http.routers.pollimage.entrypoints=https"
       - "traefik.http.routers.pollimage.tls=true"

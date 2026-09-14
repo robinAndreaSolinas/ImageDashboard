@@ -12,6 +12,49 @@ import { LayoutDashboard, Menu, Info, BarChart3, Table2, Calendar, ChevronDown, 
 import { subDays, startOfDay, endOfDay, format } from 'date-fns';
 import { useTheme } from './hooks/useTheme';
 
+const yesterdayRange = () => {
+  const yesterday = subDays(new Date(), 1);
+  return {
+    start: format(startOfDay(yesterday), "yyyy-MM-dd'T'HH:mm:ss"),
+    end: format(endOfDay(yesterday), "yyyy-MM-dd'T'HH:mm:ss"),
+  };
+};
+
+const filtersFromUrl = (): FilterState => {
+  const empty: FilterState = {
+    dateRange: { start: '', end: '' },
+    selectedDomains: [],
+    qualities: [],
+    extensions: [],
+    hasVideo: null,
+    sources: [],
+    orientations: [],
+    types: [],
+  };
+  if (typeof window === 'undefined') {
+    return { ...empty, dateRange: yesterdayRange() };
+  }
+  const params = new URLSearchParams(window.location.search);
+  const start = params.get('start');
+  const end = params.get('end');
+  const arrayFilters: (keyof FilterState)[] = ['selectedDomains', 'qualities', 'sources', 'orientations', 'types'];
+  const fromUrl: FilterState = {
+    ...empty,
+    dateRange: start && end ? { start, end } : yesterdayRange(),
+  };
+  arrayFilters.forEach((key) => {
+    const values = params.getAll(key);
+    if (values.length > 0) {
+      (fromUrl as unknown as Record<string, unknown>)[key] = values;
+    }
+  });
+  const hasVideoParam = params.get('hasVideo');
+  if (hasVideoParam !== null) {
+    fromUrl.hasVideo = hasVideoParam === 'true' ? true : hasVideoParam === 'false' ? false : null;
+  }
+  return fromUrl;
+};
+
 const App: React.FC = () => {
   const { theme, resolvedTheme, setTheme } = useTheme();
   const [rawData, setRawData] = useState<DataItem[]>([]);
@@ -59,16 +102,7 @@ const App: React.FC = () => {
   const [view, setView] = useState<'dashboard' | 'urls'>('dashboard');
 
   // Initialize filters
-  const [filters, setFilters] = useState<FilterState>({
-    dateRange: { start: '', end: '' },
-    selectedDomains: [],
-    qualities: [],
-    extensions: [],
-    hasVideo: null,
-    sources: [],
-    orientations: [],
-    types: []
-  });
+  const [filters, setFilters] = useState<FilterState>(filtersFromUrl);
 
   // Load Initial Data
   useEffect(() => {
@@ -85,21 +119,6 @@ const App: React.FC = () => {
         setRawData(data);
         inFlightBlocks.current.add('default');
         setLoadedBlocks(new Set(['default']));
-        
-        // Set default date range to yesterday (only if not already set)
-        if (!filters.dateRange.start || !filters.dateRange.end) {
-          const yesterday = subDays(new Date(), 1);
-          const startOfYesterday = startOfDay(yesterday);
-          const endOfYesterday = endOfDay(yesterday);
-          
-          setFilters(prev => ({
-            ...prev,
-            dateRange: { 
-              start: format(startOfYesterday, "yyyy-MM-dd'T'HH:mm:ss"), 
-              end: format(endOfYesterday, "yyyy-MM-dd'T'HH:mm:ss")
-            }
-          }));
-        }
       } catch (error) {
         console.error('Error loading data:', error);
       } finally {
@@ -123,42 +142,6 @@ const App: React.FC = () => {
         .catch((err) => console.error('Live refresh failed:', err));
     });
   }, []);
-
-  // Sync filters with URL on initial load
-  useEffect(() => {
-    if (typeof window === 'undefined' || rawData.length > 0) return;
-    
-    const params = new URLSearchParams(window.location.search);
-    const urlFilters: Partial<FilterState> = {};
-    
-    // Date range
-    if (params.get('start') && params.get('end')) {
-      urlFilters.dateRange = {
-        start: params.get('start')!,
-        end: params.get('end')!
-      };
-    }
-    
-    // Arrays
-    const arrayFilters: (keyof FilterState)[] = ['selectedDomains', 'qualities', 'sources', 'orientations', 'types'];
-    arrayFilters.forEach(key => {
-      const values = params.getAll(key);
-      if (values.length > 0) {
-        (urlFilters as any)[key] = values;
-      }
-    });
-    
-    // Has video
-    const hasVideoParam = params.get('hasVideo');
-    if (hasVideoParam !== null) {
-      urlFilters.hasVideo = hasVideoParam === 'true' ? true : hasVideoParam === 'false' ? false : null;
-    }
-    
-    // Apply URL filters only on initial load
-    if (Object.keys(urlFilters).length > 0) {
-      setFilters(prev => ({ ...prev, ...urlFilters }));
-    }
-  }, [rawData.length]);
 
   // Update URL when filters change (debounced)
   useEffect(() => {
