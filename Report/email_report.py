@@ -51,7 +51,7 @@ class ReportConfig:
     after_hour: int = 12
     idle_hours: int = 2
     source: str = "carta"
-    median_days: int = 14
+    median_days: int = 42
     idle_query_path: str = "queries/carta_idle.sql"
     report_query_path: str = "queries/carta_report.sql"
 
@@ -108,7 +108,7 @@ def load_config(path: str | Path | None = None) -> AppConfig:
         after_hour=int(report_raw.get("after_hour", 12)),
         idle_hours=int(report_raw.get("idle_hours", 2)),
         source=report_raw.get("source", "carta"),
-        median_days=int(report_raw.get("median_days", 14)),
+        median_days=int(report_raw.get("median_days", 42)),
         idle_query_path=report_raw.get("idle_query_path", "queries/carta_idle.sql"),
         report_query_path=report_raw.get("report_query_path", "queries/carta_report.sql"),
     )
@@ -236,26 +236,17 @@ def build_domain_table(
     )
     table = pd.read_sql(sql, conn)
     if table.empty:
-        return pd.DataFrame(columns=["dominio", "import", "mediana", "delta"])
+        return pd.DataFrame(columns=["dominio", "oggi", "scarto_pct"])
     return table
 
 
-def _fmt_delta(value) -> str:
-    if value is None or (isinstance(value, float) and pd.isna(value)):
+def _fmt_pct(value) -> str:
+    if value is None or (isinstance(value, float) and pd.isna(value)) or pd.isna(value):
         return "n/d"
-    if isinstance(value, float) and value.is_integer():
-        value = int(value)
-    if isinstance(value, (int, float)) and value > 0:
-        return f"+{value:g}" if isinstance(value, float) else f"+{value}"
-    return f"{value:g}" if isinstance(value, float) else str(value)
-
-
-def _fmt_median(value) -> str:
-    if value is None or (isinstance(value, float) and pd.isna(value)):
-        return "n/d"
-    if isinstance(value, float) and value.is_integer():
-        return str(int(value))
-    return f"{value:g}"
+    shown = int(round(float(value)))
+    if shown > 0:
+        return f"+{shown}%"
+    return f"{shown}%"
 
 
 def table_to_html(table: pd.DataFrame) -> str:
@@ -267,9 +258,8 @@ def table_to_html(table: pd.DataFrame) -> str:
         rows.append(
             "<tr>"
             f"<td>{escape(str(row['dominio']))}</td>"
-            f"<td style='text-align:right'>{int(row['import'])}</td>"
-            f"<td style='text-align:right'>{_fmt_median(row['mediana'])}</td>"
-            f"<td style='text-align:right'>{_fmt_delta(row['delta'])}</td>"
+            f"<td style='text-align:right'>{int(row['oggi'])}</td>"
+            f"<td style='text-align:right'>{_fmt_pct(row['scarto_pct'])}</td>"
             "</tr>"
         )
     body = "\n".join(rows)
@@ -277,9 +267,8 @@ def table_to_html(table: pd.DataFrame) -> str:
 <thead>
 <tr>
   <th>Dominio</th>
-  <th>Import oggi</th>
-  <th>Mediana precedente</th>
-  <th>Delta</th>
+  <th>Articoli oggi</th>
+  <th>Scarto vs stesso giorno</th>
 </tr>
 </thead>
 <tbody>
@@ -291,10 +280,10 @@ def table_to_html(table: pd.DataFrame) -> str:
 def table_to_text(table: pd.DataFrame) -> str:
     if table.empty:
         return "(nessun import da carta nel periodo considerato)"
-    lines = ["Dominio | Import oggi | Mediana precedente | Delta", "-" * 56]
+    lines = ["Dominio | Articoli oggi | Scarto vs stesso giorno", "-" * 52]
     for _, row in table.iterrows():
         lines.append(
-            f"{row['dominio']} | {int(row['import'])} | {_fmt_median(row['mediana'])} | {_fmt_delta(row['delta'])}"
+            f"{row['dominio']} | {int(row['oggi'])} | {_fmt_pct(row['scarto_pct'])}"
         )
     return "\n".join(lines)
 
@@ -410,7 +399,7 @@ def maybe_send_morning_report(
     current = now_in_tz(cfg.report.timezone, now)
     today = current.date().isoformat()
     table = build_domain_table(conn, cfg, now=current)
-    total = int(table["import"].sum()) if not table.empty else 0
+    total = int(table["oggi"].sum()) if not table.empty else 0
     template = load_template(cfg)
     link = dashboard_link(cfg.email.dashboard_url, today, cfg.report.source)
     html_body = render_message(template, table_to_html(table), today, total, link)

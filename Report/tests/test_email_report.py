@@ -60,7 +60,7 @@ timezone = "Europe/Rome"
 after_hour = 12
 idle_hours = 2
 source = "carta"
-median_days = 14
+median_days = 42
 idle_query_path = "queries/carta_idle.sql"
 report_query_path = "queries/carta_report.sql"
 """,
@@ -106,23 +106,24 @@ class TestEmailReport(unittest.TestCase):
         report.mark_sent(self.conn, datetime(2026, 9, 14, 13, 0))
         self.assertFalse(report.should_send_report(self.conn, self.cfg, now=now))
 
-    def test_domain_table_median_and_delta(self):
-        for i in range(3):
-            self._insert(f"https://www.example.it/oggi-{i}", "2026-09-14 09:00:00")
+    def test_domain_table_weekday_percent(self):
+        # lunedì 2026-09-14: 20 articoli; lunedì precedenti da 10 → scarto +100%
+        for n in range(20):
+            self._insert(f"https://www.example.it/oggi-{n}", "2026-09-14 09:00:00")
         self._insert("https://www.other.it/oggi", "2026-09-14 09:30:00")
-        for day, n in (("11", 2), ("12", 4), ("13", 6)):
-            for i in range(n):
-                self._insert(f"https://www.example.it/{day}-{i}", f"2026-09-{day} 09:00:00")
+        for day in ("2026-09-07", "2026-08-31", "2026-08-24", "2026-08-17"):
+            for n in range(10):
+                self._insert(f"https://www.example.it/{day}-{n}", f"{day} 09:00:00")
 
         now = datetime(2026, 9, 14, 13, 0, tzinfo=self.tz)
         table = report.build_domain_table(self.conn, self.cfg, now=now)
         by_domain = table.set_index("dominio")
 
-        self.assertEqual(int(by_domain.loc["example.it", "import"]), 3)
-        self.assertEqual(float(by_domain.loc["example.it", "mediana"]), 4.0)
-        self.assertEqual(float(by_domain.loc["example.it", "delta"]), -1.0)
-        self.assertEqual(int(by_domain.loc["other.it", "import"]), 1)
-        self.assertTrue(pd.isna(by_domain.loc["other.it", "mediana"]))
+        self.assertEqual(int(by_domain.loc["example.it", "oggi"]), 20)
+        self.assertEqual(float(by_domain.loc["example.it", "scarto_pct"]), 100.0)
+        self.assertEqual(report._fmt_pct(by_domain.loc["example.it", "scarto_pct"]), "+100%")
+        self.assertEqual(int(by_domain.loc["other.it", "oggi"]), 1)
+        self.assertTrue(pd.isna(by_domain.loc["other.it", "scarto_pct"]))
 
     def test_template_placeholder(self):
         html = report.render_message(

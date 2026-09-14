@@ -24,6 +24,6 @@ timezone = "Europe/Rome"
 after_hour = 12
 idle_hours = 2
 source = "carta"
-median_days = 14
+median_days = 42
 idle_query_path = "queries/carta_idle.sql"
 report_query_path = "queries/carta_report.sql"

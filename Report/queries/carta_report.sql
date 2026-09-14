@@ -1,5 +1,7 @@
--- Import odierni per dominio vs mediana dei giorni precedenti (solo giorni con import).
+-- Articoli carta di oggi per dominio vs mediana dello stesso weekday
+-- sugli ultimi {{median_days}} giorni (escluso oggi).
 -- Placeholder: {{source}} {{today}} {{median_days}}
+-- Scarto % = (oggi - mediana_stesso_giorno) / mediana_stesso_giorno * 100
 WITH raw AS (
     SELECT
         date(fetched_at) AS giorno,
@@ -49,7 +51,10 @@ today_n AS (
     SELECT dominio, n FROM daily WHERE giorno = '{{today}}'
 ),
 hist AS (
-    SELECT dominio, n FROM daily WHERE giorno < '{{today}}'
+    SELECT dominio, n
+    FROM daily
+    WHERE giorno < '{{today}}'
+      AND strftime('%w', giorno) = strftime('%w', '{{today}}')
 ),
 ranked AS (
     SELECT
@@ -59,26 +64,19 @@ ranked AS (
         COUNT(*) OVER (PARTITION BY dominio) AS cnt
     FROM hist
 ),
-mediana AS (
+riferimento AS (
     SELECT dominio, AVG(n * 1.0) AS mediana
     FROM ranked
     WHERE rn IN ((cnt + 1) / 2, (cnt + 2) / 2)
     GROUP BY dominio
 )
 SELECT
-    COALESCE(t.dominio, m.dominio) AS dominio,
-    COALESCE(t.n, 0) AS import,
-    m.mediana AS mediana,
-    CASE WHEN m.mediana IS NULL THEN NULL ELSE COALESCE(t.n, 0) - m.mediana END AS delta
+    t.dominio AS dominio,
+    t.n AS oggi,
+    CASE
+        WHEN r.mediana IS NULL OR r.mediana = 0 THEN NULL
+        ELSE ROUND(100.0 * (t.n - r.mediana) / r.mediana, 0)
+    END AS scarto_pct
 FROM today_n t
-LEFT JOIN mediana m ON m.dominio = t.dominio
-UNION
-SELECT
-    m.dominio AS dominio,
-    0 AS import,
-    m.mediana AS mediana,
-    0 - m.mediana AS delta
-FROM mediana m
-LEFT JOIN today_n t ON t.dominio = m.dominio
-WHERE t.dominio IS NULL
-ORDER BY import DESC, dominio ASC;
+LEFT JOIN riferimento r ON r.dominio = t.dominio
+ORDER BY oggi DESC, dominio ASC;
