@@ -280,7 +280,7 @@ def table_to_html(table: pd.DataFrame) -> str:
 def table_to_text(table: pd.DataFrame) -> str:
     if table.empty:
         return "(nessun import da carta nel periodo considerato)"
-    lines = ["Dominio | Articoli oggi | Scarto vs stesso giorno", "-" * 52]
+    lines = ["Dominio | Articoli oggi | Delta ", "-" * 52]
     for _, row in table.iterrows():
         lines.append(
             f"{row['dominio']} | {int(row['oggi'])} | {_fmt_pct(row['scarto_pct'])}"
