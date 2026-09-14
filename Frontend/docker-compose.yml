@@ -1,9 +1,26 @@
 services:
+  redis:
+    image: redis:7-alpine
+    container_name: front_pollimage_redis
+    command: redis-server --appendonly no --maxmemory 256mb --maxmemory-policy allkeys-lru
+    networks:
+      - internal
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
   pollimage:
     build: .
     container_name: front_pollimage
+    depends_on:
+      redis:
+        condition: service_healthy
     networks:
       - proxynet
+      - internal
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.pollimage.rule=Host(`dashboard.robinweb.it`)"
@@ -20,6 +37,8 @@ services:
       NODE_ENV: production
       PORT: 8081
       DB_PATH: /data/db.sqlite
+      REDIS_URL: redis://redis:6379
+      REDIS_TTL: 3600
     volumes:
       - /var/job/data/db.sqlite:/data/db.sqlite:ro
     restart: unless-stopped
@@ -27,3 +46,5 @@ services:
 networks:
   proxynet:
     external: true
+  internal:
+    driver: bridge

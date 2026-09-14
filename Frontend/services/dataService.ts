@@ -155,3 +155,14 @@ export const fetchDataFromAPI = async (forceRefresh: boolean = false, blockFrom?
     return [];
   }
 };
+
+export const subscribeLiveUpdates = (onUpdate: () => void): (() => void) => {
+  if (typeof window === 'undefined' || typeof EventSource === 'undefined') {
+    return () => {};
+  }
+  const es = new EventSource(`${API_URL}/api/events`);
+  es.addEventListener('update', () => {
+    onUpdate();
+  });
+  return () => es.close();
+};

@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
-import { fetchDataFromAPI } from './services/dataService';
+import { fetchDataFromAPI, subscribeLiveUpdates } from './services/dataService';
 import { DataItem, FilterState, QualityClass, Orientation, ContentType } from './types';
 import { FilterPanel } from './components/FilterPanel';
 import { DashboardCharts } from './components/DashboardCharts';
@@ -108,6 +108,20 @@ const App: React.FC = () => {
     };
     
     loadData();
+  }, []);
+
+  useEffect(() => {
+    return subscribeLiveUpdates(() => {
+      fetchDataFromAPI(true)
+        .then((data) => {
+          setRawData((prev) => {
+            const incoming = new Set(data.map((d) => d.url));
+            const kept = prev.filter((d) => !incoming.has(d.url));
+            return [...data, ...kept];
+          });
+        })
+        .catch((err) => console.error('Live refresh failed:', err));
+    });
   }, []);
 
   // Sync filters with URL on initial load
