@@ -10,6 +10,7 @@ cc = []
 bcc = []
 subject = "Report import carta — %data%"
 template_path = "templates/carta_morning.html"
+dashboard_url = "https://dashboard.robinweb.it/"
 
 # Solo se method = "smtp"
 smtp_host = "smtp.example.com"

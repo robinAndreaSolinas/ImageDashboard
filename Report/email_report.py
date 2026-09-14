@@ -9,6 +9,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from html import escape
 from pathlib import Path
+from urllib.parse import urlencode
 from zoneinfo import ZoneInfo
 
 import pandas as pd
@@ -41,6 +42,7 @@ class EmailConfig:
     bcc: list[str] = field(default_factory=list)
     subject: str = "Report import carta — %data%"
     template_path: str = "templates/carta_morning.html"
+    dashboard_url: str = "https://dashboard.robinweb.it/"
 
 
 @dataclass
@@ -99,6 +101,7 @@ def load_config(path: str | Path | None = None) -> AppConfig:
         bcc=_as_list(email_raw.get("bcc")),
         subject=email_raw.get("subject", "Report import carta — %data%"),
         template_path=email_raw.get("template_path", "templates/carta_morning.html"),
+        dashboard_url=email_raw.get("dashboard_url", "https://dashboard.robinweb.it/"),
     )
     report = ReportConfig(
         timezone=report_raw.get("timezone", "Europe/Rome"),
@@ -296,15 +299,26 @@ def table_to_text(table: pd.DataFrame) -> str:
     return "\n".join(lines)
 
 
+def dashboard_link(base: str, today: str, source: str = "carta") -> str:
+    params = urlencode({
+        "start": f"{today}T00:00:00",
+        "end": f"{today}T23:59:59",
+        "sources": source,
+    })
+    root = (base or "https://dashboard.robinweb.it/").rstrip("/")
+    return f"{root}/?{params}"
+
+
 def load_template(cfg: AppConfig) -> str:
     return _resolve(cfg, cfg.email.template_path).read_text(encoding="utf-8")
 
 
-def render_message(template: str, table_html: str, today: str, total: int) -> str:
+def render_message(template: str, table_html: str, today: str, total: int, link: str = "") -> str:
     return (
         template.replace("%tabella%", table_html)
         .replace("%data%", today)
         .replace("%totale%", str(total))
+        .replace("%link%", link)
     )
 
 
@@ -398,8 +412,9 @@ def maybe_send_morning_report(
     table = build_domain_table(conn, cfg, now=current)
     total = int(table["import"].sum()) if not table.empty else 0
     template = load_template(cfg)
-    html_body = render_message(template, table_to_html(table), today, total)
-    text_body = render_message(template, table_to_text(table), today, total)
+    link = dashboard_link(cfg.email.dashboard_url, today, cfg.report.source)
+    html_body = render_message(template, table_to_html(table), today, total, link)
+    text_body = render_message(template, table_to_text(table), today, total, link)
     subject = render_subject(cfg.email.subject, today)
     send_email(cfg.email, subject, html_body, text_body, dry_run=dry_run)
     if not dry_run:

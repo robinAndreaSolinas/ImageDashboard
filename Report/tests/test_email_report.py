@@ -126,15 +126,25 @@ class TestEmailReport(unittest.TestCase):
 
     def test_template_placeholder(self):
         html = report.render_message(
-            "Ciao\n%tabella%\nTotale %totale% il %data%",
+            "Ciao\n%tabella%\nTotale %totale% il %data%\n%link%",
             "<table/>",
             "2026-09-14",
             9,
+            "https://dashboard.robinweb.it/?start=2026-09-14T00%3A00%3A00&end=2026-09-14T23%3A59%3A59&sources=carta",
         )
         self.assertIn("<table/>", html)
         self.assertIn("9", html)
         self.assertIn("2026-09-14", html)
+        self.assertIn("dashboard.robinweb.it", html)
         self.assertNotIn("%tabella%", html)
+        self.assertNotIn("%link%", html)
+
+    def test_dashboard_link_uses_today(self):
+        url = report.dashboard_link("https://dashboard.robinweb.it/", "2026-09-15", "carta")
+        self.assertEqual(
+            url,
+            "https://dashboard.robinweb.it/?start=2026-09-15T00%3A00%3A00&end=2026-09-15T23%3A59%3A59&sources=carta",
+        )
 
     def test_load_config_and_recipients(self):
         self.assertEqual(self.cfg.email.to, ["one@test.it", "two@test.it"])
