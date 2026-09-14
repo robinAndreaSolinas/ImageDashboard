@@ -113,7 +113,7 @@ const getPayload = async (from, { bypassCache = false } = {}) => {
     }
   }
   const payload = loadFromDb(from);
-  await cacheSet(from, payload);
+  cacheSet(from, payload).catch(() => {});
   return payload;
 };
 
@@ -139,10 +139,15 @@ app.get('/api/events', (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
   res.flushHeaders?.();
   res.write(`event: hello\ndata: ${JSON.stringify({ redis: redisStatus() })}\n\n`);
   sseClients.add(res);
+  const ping = setInterval(() => {
+    res.write(`: ping\n\n`);
+  }, 15000);
   req.on('close', () => {
+    clearInterval(ping);
     sseClients.delete(res);
   });
 });

@@ -18,7 +18,10 @@ export async function connectRedis() {
     return null;
   }
 
-  redis = createClient({ url: REDIS_URL });
+  redis = createClient({
+    url: REDIS_URL,
+    socket: { connectTimeout: 3000, reconnectStrategy: (retries) => Math.min(retries * 200, 2000) },
+  });
   redis.on('error', (err) => console.error('Redis error:', err.message));
   await redis.connect();
   subscriber = redis.duplicate();
@@ -36,9 +39,12 @@ export function redisStatus() {
 
 export async function cacheGet(from) {
   if (!redis?.isOpen) return null;
-  const raw = await redis.get(cacheKey(from));
-  if (!raw) return null;
   try {
+    const raw = await Promise.race([
+      redis.get(cacheKey(from)),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('redis get timeout')), 2000)),
+    ]);
+    if (!raw) return null;
     return JSON.parse(raw);
   } catch {
     return null;
@@ -47,7 +53,14 @@ export async function cacheGet(from) {
 
 export async function cacheSet(from, payload) {
   if (!redis?.isOpen) return;
-  await redis.set(cacheKey(from), JSON.stringify(payload), { EX: REDIS_TTL });
+  try {
+    await Promise.race([
+      redis.set(cacheKey(from), JSON.stringify(payload), { EX: REDIS_TTL }),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('redis set timeout')), 5000)),
+    ]);
+  } catch (err) {
+    console.error('Redis set skipped:', err.message);
+  }
 }
 
 export async function cacheDelDefault() {

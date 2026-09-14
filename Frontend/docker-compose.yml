@@ -4,7 +4,7 @@ services:
     container_name: front_pollimage_redis
     command: redis-server --appendonly no --maxmemory 256mb --maxmemory-policy allkeys-lru
     networks:
-      - internal
+      - default
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
@@ -20,9 +20,10 @@ services:
         condition: service_healthy
     networks:
       - proxynet
-      - internal
+      - default
     labels:
       - "traefik.enable=true"
+      - "traefik.docker.network=proxynet"
       - "traefik.http.routers.pollimage.rule=Host(`dashboard.robinweb.it`)"
       - "traefik.http.routers.pollimage.entrypoints=https"
       - "traefik.http.routers.pollimage.tls=true"
@@ -46,5 +47,5 @@ services:
 networks:
   proxynet:
     external: true
-  internal:
+  default:
     driver: bridge
