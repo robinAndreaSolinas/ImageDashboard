@@ -1,2 +1,0 @@
-# Cron scraping (separato dal report).
-0 * * * * cd /var/job/Scraping && docker compose run --rm --no-deps app

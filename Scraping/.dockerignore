@@ -26,7 +26,8 @@ tests/
 .pytest_cache/
 
 # Git
-.git*
+.git/
+.gitignore
 
 # Local files and secrets
 local/

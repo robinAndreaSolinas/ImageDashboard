@@ -1,6 +1,6 @@
 services:
   app:
-    build: sollo/polling-image:latest
+    image: sollo/polling-image:latest
     container_name: pollimg
     env_file:
       - .env
@@ -11,4 +11,4 @@ services:
       resources:
         limits:
           cpus: "1"
-          memory: 1G
+          memory: 2G
