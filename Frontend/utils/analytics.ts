@@ -1,5 +1,30 @@
 import { DataItem, QualityClass, Orientation, ContentType } from '../types';
 
+// ── Domain colors ────────────────────────────────────────────────────────────
+
+const CHART_COLORS_FALLBACK = [
+  '#6366f1', '#10b981', '#f59e0b', '#ef4444',
+  '#8b5cf6', '#ec4899', '#06b6d4', '#f97316', '#a855f7', '#e11d48',
+];
+
+export const DOMAIN_COLOR_MAP: Record<string, string> = {
+  'www.lanazione.it':          '#f97316', // orange
+  'www.ilgiorno.it':           '#3b82f6', // blue
+  'www.ilrestodelcarlino.it':  '#10b981', // green
+  'www.quotidiano.net':        '#8b5cf6', // violet
+  'luce.lanazione.it':         '#f59e0b', // amber
+  'sport.quotidiano.net':      '#06b6d4', // cyan
+};
+
+export const getDomainColor = (domain: string): string => {
+  if (DOMAIN_COLOR_MAP[domain]) return DOMAIN_COLOR_MAP[domain];
+  let hash = 0;
+  for (let i = 0; i < domain.length; i++) {
+    hash = (hash * 31 + domain.charCodeAt(i)) & 0xffffffff;
+  }
+  return CHART_COLORS_FALLBACK[Math.abs(hash) % CHART_COLORS_FALLBACK.length];
+};
+
 // --- Derivation Helpers ---
 
 export const getQuality = (item: DataItem): QualityClass => {

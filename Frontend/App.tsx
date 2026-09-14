@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo, useCallback } from 'react';
+import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { fetchDataFromAPI } from './services/dataService';
 import { DataItem, FilterState, QualityClass, Orientation, ContentType } from './types';
 import { FilterPanel } from './components/FilterPanel';
@@ -16,6 +16,45 @@ const App: React.FC = () => {
   const { theme, resolvedTheme, setTheme } = useTheme();
   const [rawData, setRawData] = useState<DataItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingBlock, setLoadingBlock] = useState(false);
+
+  // Track which 30-day blocks have already been loaded (or are in flight)
+  const [loadedBlocks, setLoadedBlocks] = useState<Set<string>>(new Set());
+  const inFlightBlocks = useRef<Set<string>>(new Set());
+
+  // ── Block helpers ──────────────────────────────────────────────────────────
+  // Given a date string, returns the 'from' date (YYYY-MM-DD) of the 30-day
+  // historical block that contains it, or null if it falls in the default block
+  // (last 30 days). Blocks are anchored backwards from today in 30-day steps.
+  const getBlockFrom = (dateStr: string): string | null => {
+    const today = startOfDay(new Date());
+    const date = startOfDay(new Date(dateStr));
+    const diffDays = Math.floor((today.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
+    if (diffDays <= 30) return null; // within default block
+    const blockIndex = Math.ceil((diffDays - 30) / 30); // 1, 2, 3 …
+    return format(subDays(today, 30 + blockIndex * 30), 'yyyy-MM-dd');
+  };
+
+  const loadBlock = useCallback(async (blockFrom: string | null) => {
+    const blockKey = blockFrom ?? 'default';
+    if (inFlightBlocks.current.has(blockKey)) return;
+    inFlightBlocks.current.add(blockKey);
+    setLoadingBlock(true);
+    try {
+      const newData = await fetchDataFromAPI(false, blockFrom ?? undefined);
+      setRawData(prev => {
+        const existingUrls = new Set(prev.map(d => d.url));
+        const unique = newData.filter(d => !existingUrls.has(d.url));
+        return unique.length > 0 ? [...prev, ...unique] : prev;
+      });
+      setLoadedBlocks(prev => new Set([...prev, blockKey]));
+    } catch (err) {
+      console.error('Error loading block:', err);
+      inFlightBlocks.current.delete(blockKey);
+    } finally {
+      setLoadingBlock(false);
+    }
+  }, []);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [view, setView] = useState<'dashboard' | 'urls'>('dashboard');
 
@@ -44,6 +83,8 @@ const App: React.FC = () => {
       try {
         const data = await fetchDataFromAPI(forceRefresh);
         setRawData(data);
+        inFlightBlocks.current.add('default');
+        setLoadedBlocks(new Set(['default']));
         
         // Set default date range to yesterday (only if not already set)
         if (!filters.dateRange.start || !filters.dateRange.end) {
@@ -138,6 +179,22 @@ const App: React.FC = () => {
     return () => clearTimeout(timeoutId);
   }, [filters, rawData.length]);
 
+  // When the date filter changes, check if the needed 30-day block is already
+  // loaded; if not, fetch it and merge into rawData.
+  useEffect(() => {
+    if (rawData.length === 0) return;
+    [filters.dateRange.start, filters.dateRange.end]
+      .filter(Boolean)
+      .forEach(dateStr => {
+        const blockFrom = getBlockFrom(dateStr);
+        const blockKey = blockFrom ?? 'default';
+        if (!loadedBlocks.has(blockKey)) {
+          loadBlock(blockFrom);
+        }
+      });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filters.dateRange.start, filters.dateRange.end, loadBlock]);
+
   const navigate = (target: 'dashboard' | 'urls') => {
     setView(target);
     if (typeof window !== 'undefined') {
@@ -209,7 +266,7 @@ const App: React.FC = () => {
   }, [rawData, dateBoundaries, filterSets, filters.hasVideo]);
 
   // Derived lists for Filter UI
-  const availableDomains = useMemo(() => Array.from(new Set(rawData.map(d => d.domain))), [rawData]);
+  const availableDomains = useMemo(() => Array.from(new Set(rawData.map(d => d.domain))).filter(Boolean), [rawData]);
   const availableSources = useMemo(() => Array.from(new Set(rawData.map(d => d.source))), [rawData]);
 
   // Top domains for quick filters
@@ -353,10 +410,14 @@ const App: React.FC = () => {
           theme={resolvedTheme}
           onRefreshData={() => {
             setLoading(true);
+            setLoadedBlocks(new Set());
+            inFlightBlocks.current.clear();
             const refreshData = async () => {
               try {
                 const data = await fetchDataFromAPI(true);
                 setRawData(data);
+                inFlightBlocks.current.add('default');
+                setLoadedBlocks(new Set(['default']));
               } catch (error) {
                 console.error('Error refreshing data:', error);
               } finally {
@@ -406,6 +467,12 @@ const App: React.FC = () => {
                         <span className={resolvedTheme === 'dark' ? 'text-slate-400' : 'text-slate-700'}> su <span className="font-bold">{rawData.length}</span> totali</span>
                       )}
                     </span>
+                    {loadingBlock && (
+                      <span className="flex items-center gap-1 text-indigo-400 animate-pulse">
+                        <span className="w-2 h-2 rounded-full bg-indigo-400 animate-ping inline-block" />
+                        Caricamento periodo...
+                      </span>
+                    )}
                     {filters.dateRange.start && filters.dateRange.end && (
                       <span className="flex items-center gap-1">
                         <Calendar className={`w-3 h-3 ${resolvedTheme === 'dark' ? 'text-slate-400' : 'text-slate-700'}`} />

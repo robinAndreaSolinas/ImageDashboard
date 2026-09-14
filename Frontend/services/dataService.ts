@@ -65,31 +65,33 @@ export const generateMockData = (count: number = 500): DataItem[] => {
   return data;
 };
 
-const CACHE_KEY = 'datascope_data_cache';
-const CACHE_DURATION = 60 * 60 * 1000; // 1 hour in milliseconds
+// Default block = last 30 days (rolling). Historical blocks use their date as key.
+const CACHE_KEY_DEFAULT = 'datascope_cache_latest';
+const CACHE_KEY_HISTORICAL = (from: string) => `datascope_cache_${from}`;
+
+// Default block expires in 1 hour; historical blocks are immutable — 7 days TTL
+const CACHE_DURATION_DEFAULT = 60 * 60 * 1000;
+const CACHE_DURATION_HISTORICAL = 7 * 24 * 60 * 60 * 1000;
 
 interface CacheEntry {
   data: DataItem[];
   timestamp: number;
 }
 
-const getCachedData = (): DataItem[] | null => {
+const getCachedData = (cacheKey: string, maxAge: number): DataItem[] | null => {
   try {
-    const cached = localStorage.getItem(CACHE_KEY);
+    const cached = localStorage.getItem(cacheKey);
     if (!cached) return null;
     
     const entry: CacheEntry = JSON.parse(cached);
-    const now = Date.now();
-    const age = now - entry.timestamp;
+    const age = Date.now() - entry.timestamp;
     
-    // Check if cache is still valid (less than 1 hour old)
-    if (age < CACHE_DURATION) {
-      console.log(`Using cached data (age: ${Math.round(age / 1000 / 60)} minutes)`);
+    if (age < maxAge) {
+      console.log(`Using cached data [${cacheKey}] (age: ${Math.round(age / 1000 / 60)} min)`);
       return entry.data;
     }
     
-    // Cache expired, remove it
-    localStorage.removeItem(CACHE_KEY);
+    localStorage.removeItem(cacheKey);
     return null;
   } catch (error) {
     console.error('Error reading cache:', error);
@@ -97,60 +99,59 @@ const getCachedData = (): DataItem[] | null => {
   }
 };
 
-const setCachedData = (data: DataItem[]): void => {
+const setCachedData = (cacheKey: string, data: DataItem[]): void => {
   try {
-    const entry: CacheEntry = {
-      data,
-      timestamp: Date.now()
-    };
-    localStorage.setItem(CACHE_KEY, JSON.stringify(entry));
-    console.log('Data cached successfully');
+    const entry: CacheEntry = { data, timestamp: Date.now() };
+    localStorage.setItem(cacheKey, JSON.stringify(entry));
+    console.log(`Data cached [${cacheKey}]`);
   } catch (error) {
     console.error('Error saving cache:', error);
   }
 };
 
 // Fetch real data from API
-export const fetchDataFromAPI = async (forceRefresh: boolean = false): Promise<DataItem[]> => {
-  // Check cache first (unless forced refresh)
+// blockFrom: 'YYYY-MM-DD' for a fixed historical block, undefined for the default rolling block
+export const fetchDataFromAPI = async (forceRefresh: boolean = false, blockFrom?: string): Promise<DataItem[]> => {
+  const isHistorical = Boolean(blockFrom);
+  const cacheKey = isHistorical ? CACHE_KEY_HISTORICAL(blockFrom!) : CACHE_KEY_DEFAULT;
+  const cacheDuration = isHistorical ? CACHE_DURATION_HISTORICAL : CACHE_DURATION_DEFAULT;
+
   if (!forceRefresh) {
-    const cached = getCachedData();
-    if (cached) {
-      return cached;
-    }
+    const cached = getCachedData(cacheKey, cacheDuration);
+    if (cached) return cached;
   }
-  
+
   try {
-    const response = await fetch(`${API_URL}/api/data`);
-    
+    const url = blockFrom ? `${API_URL}/api/data?from=${blockFrom}` : `${API_URL}/api/data`;
+    const response = await fetch(url);
+
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
-    
+
     const result = await response.json();
-    
+
     if (result.success && result.data) {
-      const data = result.data;
-      
-      // Save to cache with current timestamp
-      setCachedData(data);
-      
-      return data;
+      setCachedData(cacheKey, result.data);
+      return result.data;
     } else {
       throw new Error('Invalid response format from API');
     }
   } catch (error) {
-    console.error('Error fetching data from API:', error);
-    
-    // Try to use cache even if expired as fallback
-    const cached = getCachedData();
-    if (cached) {
-      console.log('Using expired cache as fallback');
-      return cached;
+    console.error(`Error fetching data [blockFrom=${blockFrom ?? 'default'}]:`, error);
+
+    // Fallback: return stale cache if available
+    const stale = getCachedData(cacheKey, Infinity);
+    if (stale) {
+      console.log('Using stale cache as fallback');
+      return stale;
     }
-    
-    console.warn('Falling back to mock data');
-    // Last resort: mock data
-    return generateMockData(800);
+
+    if (!isHistorical) {
+      console.warn('Falling back to mock data');
+      return generateMockData(800);
+    }
+
+    return [];
   }
 };

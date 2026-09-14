@@ -94,18 +94,35 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', database: 'connected' });
 });
 
+// Base WHERE used by all data routes
+const BASE_WHERE = "NOT (url LIKE '%/ultimaora/%' OR url NOT LIKE '%//%/_%')";
+
+// Validate a YYYY-MM-DD date string
+const isValidDate = (s) => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s);
+
 // Get all data from article_image_view
 app.get('/api/data', (req, res) => {
   try {
-    const query = 'SELECT * FROM article_image_view';
-    const rows = db.prepare(query).all();
-    
+    const from = isValidDate(req.query.from) ? req.query.from : null;
+
+    let rows;
+    if (from) {
+      // Fixed 30-day historical block starting at `from`
+      const query = `SELECT * FROM article_image_view WHERE ${BASE_WHERE} AND published_at >= date(?) AND published_at < date(?, '+30 days')`;
+      rows = db.prepare(query).all(from, from);
+    } else {
+      // Default: rolling last 30 days
+      const query = `SELECT * FROM article_image_view WHERE ${BASE_WHERE} AND published_at >= date('now', '-30 days')`;
+      rows = db.prepare(query).all();
+    }
+
     const data = rows.map((row, index) => rowToDataItem(row, index));
-    
+
     res.json({
       success: true,
       count: data.length,
-      data: data
+      data: data,
+      blockFrom: from,
     });
   } catch (error) {
     console.error('Error fetching data:', error);
@@ -121,9 +138,14 @@ app.get('/api/data/filtered', (req, res) => {
   try {
     const { domain, source, extension, hasVideo } = req.query;
     
-    let query = 'SELECT * FROM article_image_view WHERE 1=1';
-    const params = [];
-    
+    const from = isValidDate(req.query.from) ? req.query.from : null;
+    let query = from
+      ? `SELECT * FROM article_image_view WHERE ${BASE_WHERE} AND published_at >= date(?) AND published_at < date(?, '+30 days')`
+      : `SELECT * FROM article_image_view WHERE ${BASE_WHERE} AND published_at >= date('now', '-30 days')`;
+
+    // Prepend date params when using a fixed block
+    const params = from ? [from, from] : [];
+
     if (domain) {
       query += ' AND domain = ?';
       params.push(domain);

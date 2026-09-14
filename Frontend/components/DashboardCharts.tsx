@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { DataItem, QualityClass, FilterState } from '../types';
-import { getQuality, calculateGaussian } from '../utils/analytics';
+import { getQuality, calculateGaussian, getDomainColor } from '../utils/analytics';
 import {
   PieChart, Pie, Cell, Tooltip, ResponsiveContainer,
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend,
@@ -26,12 +26,6 @@ const QUALITY_COLORS: Record<QualityClass, string> = {
   [QualityClass.NO_IMAGE]: '#64748b',   // Gray - Senza Immagine
 };
 
-// Domain color mapping function (assigns consistent colors to domains)
-const getDomainColor = (domain: string, index: number): string => {
-  // Use a hash-like function to assign consistent colors to domains
-  const hash = domain.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-  return CHART_COLORS[(hash + index) % CHART_COLORS.length];
-};
 
 const RADIAN = Math.PI / 180;
 
@@ -154,8 +148,8 @@ export const DashboardCharts: React.FC<Props> = React.memo(({ data, onFilter, th
     });
 
     // Create domain color mapping
-    const domainColors = uniqueDomains.reduce((acc, domain, index) => {
-      acc[domain] = getDomainColor(domain, index);
+    const domainColors = uniqueDomains.reduce((acc, domain) => {
+      acc[domain] = getDomainColor(domain);
       return acc;
     }, {} as Record<string, string>);
 

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { FilterState, QualityClass, Orientation, ContentType } from '../types';
+import { getDomainColor } from '../utils/analytics';
 import { X, Filter, RefreshCw, Calendar, ChevronLeft, ChevronDown, ChevronUp, Globe, Image, Video, Layout, FileText, Building2 } from 'lucide-react';
 import { subDays, subMonths, startOfDay, format } from 'date-fns';
 import { it } from 'date-fns/locale';
@@ -54,7 +55,7 @@ const FilterSection: React.FC<FilterSectionProps> = ({ title, icon, children, de
 };
 
 const CheckboxGroup: React.FC<{
-  options: { value: string; label: string; color?: string }[];
+  options: { value: string; label: string; color?: string; dotColor?: string }[];
   selected: string[];
   onChange: (value: string) => void;
   maxVisible?: number;
@@ -95,13 +96,25 @@ const CheckboxGroup: React.FC<{
         const isSelected = selected.includes(option.value);
         const colorClass = getColorClass(option.color, isSelected);
         
+        const dotStyle = option.dotColor
+          ? { backgroundColor: option.dotColor, boxShadow: isSelected ? `0 0 6px ${option.dotColor}88` : 'none' }
+          : undefined;
+        const borderStyle = option.dotColor && isSelected
+          ? { borderColor: option.dotColor, backgroundColor: `${option.dotColor}22` }
+          : undefined;
+
         return (
           <label
             key={option.value}
+            style={borderStyle}
             className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer transition-all ${isDark ? 'hover:bg-slate-700/30' : 'hover:bg-slate-200'} ${
-              isSelected
-                ? colorClass || 'border-indigo-500 bg-indigo-500/20 text-indigo-300'
-                : colorClass || (isDark ? 'border-slate-700 text-slate-300 hover:border-slate-600' : 'border-slate-400 text-slate-800 hover:border-slate-500')
+              option.dotColor
+                ? isSelected
+                  ? (isDark ? 'text-slate-100' : 'text-slate-900')
+                  : (isDark ? 'border-slate-700 text-slate-300 hover:border-slate-600' : 'border-slate-400 text-slate-800 hover:border-slate-500')
+                : isSelected
+                  ? colorClass || 'border-indigo-500 bg-indigo-500/20 text-indigo-300'
+                  : colorClass || (isDark ? 'border-slate-700 text-slate-300 hover:border-slate-600' : 'border-slate-400 text-slate-800 hover:border-slate-500')
             }`}
           >
             <input
@@ -110,6 +123,9 @@ const CheckboxGroup: React.FC<{
               onChange={() => onChange(option.value)}
               className={`w-4 h-4 rounded ${isDark ? 'border-slate-600 bg-slate-900' : 'border-slate-400 bg-white'} text-indigo-600 focus:ring-indigo-500 focus:ring-1 cursor-pointer`}
             />
+            {option.dotColor && (
+              <span className="w-2.5 h-2.5 rounded-full flex-shrink-0 transition-shadow" style={dotStyle} />
+            )}
             <span className="text-xs flex-1">{option.label}</span>
           </label>
         );
@@ -345,7 +361,7 @@ export const FilterPanel: React.FC<Props> = ({
               </button>
             )}
             <CheckboxGroup
-              options={availableDomains.map(d => ({ value: d, label: d }))}
+              options={availableDomains.map(d => ({ value: d, label: d, dotColor: getDomainColor(d) }))}
               selected={filters.selectedDomains}
               onChange={(value) => toggleFilter('selectedDomains', value)}
               maxVisible={8}
