@@ -45,6 +45,10 @@ def _cfg(tmp: Path) -> report.AppConfig:
         (ROOT / "queries" / "carta_report.sql").read_text(encoding="utf-8"),
         encoding="utf-8",
     )
+    (tmp / "queries" / "carta_import_window.sql").write_text(
+        (ROOT / "queries" / "carta_import_window.sql").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
     path = tmp / "config.toml"
     path.write_text(
         """
@@ -125,14 +129,26 @@ class TestEmailReport(unittest.TestCase):
         self.assertEqual(int(by_domain.loc["other.it", "oggi"]), 1)
         self.assertTrue(pd.isna(by_domain.loc["other.it", "scarto_pct"]))
 
+    def test_import_window_human(self):
+        self._insert("https://www.example.it/a", "2026-09-14 08:12:00")
+        self._insert("https://www.example.it/b", "2026-09-14 11:40:33")
+        inizio, fine = report.import_window(self.conn, self.cfg, "2026-09-14")
+        self.assertEqual(inizio, "14 settembre 2026 alle 08:12")
+        self.assertEqual(fine, "14 settembre 2026 alle 11:40")
+
     def test_template_placeholder(self):
         html = report.render_message(
-            "Ciao\n%tabella%\nTotale %totale% il %data%\n%link%",
+            "Ciao\n%tabella%\nTotale %totale% il %data%\n%link%\n%inizio% %fine%",
             "<table/>",
             "2026-09-14",
             9,
             "https://dashboard.robinweb.it/?start=2026-09-14T00%3A00%3A00&end=2026-09-14T23%3A59%3A59&sources=carta",
+            "14 settembre 2026 alle 08:12",
+            "14 settembre 2026 alle 11:40",
         )
+        self.assertIn("14 settembre 2026 alle 08:12", html)
+        self.assertNotIn("%inizio%", html)
+        self.assertNotIn("%fine%", html)
         self.assertIn("<table/>", html)
         self.assertIn("9", html)
         self.assertIn("2026-09-14", html)

@@ -27,3 +27,4 @@ source = "carta"
 median_days = 42
 idle_query_path = "queries/carta_idle.sql"
 report_query_path = "queries/carta_report.sql"
+window_query_path = "queries/carta_import_window.sql"

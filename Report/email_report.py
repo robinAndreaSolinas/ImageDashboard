@@ -54,6 +54,7 @@ class ReportConfig:
     median_days: int = 42
     idle_query_path: str = "queries/carta_idle.sql"
     report_query_path: str = "queries/carta_report.sql"
+    window_query_path: str = "queries/carta_import_window.sql"
 
 
 @dataclass
@@ -111,6 +112,7 @@ def load_config(path: str | Path | None = None) -> AppConfig:
         median_days=int(report_raw.get("median_days", 42)),
         idle_query_path=report_raw.get("idle_query_path", "queries/carta_idle.sql"),
         report_query_path=report_raw.get("report_query_path", "queries/carta_report.sql"),
+        window_query_path=report_raw.get("window_query_path", "queries/carta_import_window.sql"),
     )
     return AppConfig(email=email, report=report, config_dir=config_path.parent)
 
@@ -298,16 +300,64 @@ def dashboard_link(base: str, today: str, source: str = "carta") -> str:
     return f"{root}/?{params}"
 
 
+MESI_IT = (
+    "gennaio",
+    "febbraio",
+    "marzo",
+    "aprile",
+    "maggio",
+    "giugno",
+    "luglio",
+    "agosto",
+    "settembre",
+    "ottobre",
+    "novembre",
+    "dicembre",
+)
+
+
+def format_human_datetime(value) -> str:
+    if value is None or (isinstance(value, float) and pd.isna(value)) or pd.isna(value):
+        return "n/d"
+    dt = pd.to_datetime(value)
+    if pd.isna(dt):
+        return "n/d"
+    return f"{dt.day} {MESI_IT[dt.month - 1]} {dt.year} alle {dt.strftime('%H:%M')}"
+
+
+def import_window(conn: sqlite3.Connection, cfg: AppConfig, today: str) -> tuple[str, str]:
+    sql = load_sql(
+        cfg,
+        cfg.report.window_query_path,
+        source=cfg.report.source,
+        today=today,
+    )
+    row = pd.read_sql(sql, conn)
+    if row.empty:
+        return "n/d", "n/d"
+    return format_human_datetime(row.iloc[0]["inizio"]), format_human_datetime(row.iloc[0]["fine"])
+
+
 def load_template(cfg: AppConfig) -> str:
     return _resolve(cfg, cfg.email.template_path).read_text(encoding="utf-8")
 
 
-def render_message(template: str, table_html: str, today: str, total: int, link: str = "") -> str:
+def render_message(
+    template: str,
+    table_html: str,
+    today: str,
+    total: int,
+    link: str = "",
+    inizio: str = "n/d",
+    fine: str = "n/d",
+) -> str:
     return (
         template.replace("%tabella%", table_html)
         .replace("%data%", today)
         .replace("%totale%", str(total))
         .replace("%link%", link)
+        .replace("%inizio%", inizio)
+        .replace("%fine%", fine)
     )
 
 
@@ -402,8 +452,9 @@ def maybe_send_morning_report(
     total = int(table["oggi"].sum()) if not table.empty else 0
     template = load_template(cfg)
     link = dashboard_link(cfg.email.dashboard_url, today, cfg.report.source)
-    html_body = render_message(template, table_to_html(table), today, total, link)
-    text_body = render_message(template, table_to_text(table), today, total, link)
+    inizio, fine = import_window(conn, cfg, today)
+    html_body = render_message(template, table_to_html(table), today, total, link, inizio, fine)
+    text_body = render_message(template, table_to_text(table), today, total, link, inizio, fine)
     subject = render_subject(cfg.email.subject, today)
     send_email(cfg.email, subject, html_body, text_body, dry_run=dry_run)
     if not dry_run:
