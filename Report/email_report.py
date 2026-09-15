@@ -270,7 +270,7 @@ def table_to_html(table: pd.DataFrame) -> str:
 <tr>
   <th>Dominio</th>
   <th>Articoli oggi</th>
-  <th>Scarto vs stesso giorno</th>
+  <th>Delta</th>
 </tr>
 </thead>
 <tbody>
