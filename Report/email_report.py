@@ -316,12 +316,15 @@ MESI_IT = (
 )
 
 
-def format_human_datetime(value) -> str:
+def format_human_datetime(value, tz_name: str = "Europe/Rome") -> str:
     if value is None or (isinstance(value, float) and pd.isna(value)) or pd.isna(value):
         return "n/d"
     dt = pd.to_datetime(value)
     if pd.isna(dt):
         return "n/d"
+    if dt.tzinfo is None:
+        dt = dt.tz_localize("UTC")
+    dt = dt.tz_convert(tz_name)
     return f"{dt.day} {MESI_IT[dt.month - 1]} {dt.year} alle {dt.strftime('%H:%M')}"
 
 
@@ -335,7 +338,11 @@ def import_window(conn: sqlite3.Connection, cfg: AppConfig, today: str) -> tuple
     row = pd.read_sql(sql, conn)
     if row.empty:
         return "n/d", "n/d"
-    return format_human_datetime(row.iloc[0]["inizio"]), format_human_datetime(row.iloc[0]["fine"])
+    first = row.iloc[0]
+    start = first["start"] if "start" in first.index else first.get("inizio")
+    end = first["end"] if "end" in first.index else first.get("fine")
+    tz = cfg.report.timezone
+    return format_human_datetime(start, tz), format_human_datetime(end, tz)
 
 
 def load_template(cfg: AppConfig) -> str:

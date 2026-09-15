@@ -22,6 +22,7 @@ def _db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             article_url TEXT,
             source TEXT,
+            published_at TIMESTAMP,
             fetched_at TIMESTAMP
         )"""
     )
@@ -86,8 +87,8 @@ class TestEmailReport(unittest.TestCase):
 
     def _insert(self, url, fetched_at, source="carta"):
         self.conn.execute(
-            "INSERT INTO article_image (article_url, source, fetched_at) VALUES (?, ?, ?)",
-            (url, source, fetched_at),
+            "INSERT INTO article_image (article_url, source, fetched_at, published_at) VALUES (?, ?, ?, ?)",
+            (url, source, fetched_at, fetched_at),
         )
         self.conn.commit()
 
@@ -133,8 +134,8 @@ class TestEmailReport(unittest.TestCase):
         self._insert("https://www.example.it/a", "2026-09-14 08:12:00")
         self._insert("https://www.example.it/b", "2026-09-14 11:40:33")
         inizio, fine = report.import_window(self.conn, self.cfg, "2026-09-14")
-        self.assertEqual(inizio, "14 settembre 2026 alle 08:12")
-        self.assertEqual(fine, "14 settembre 2026 alle 11:40")
+        self.assertEqual(inizio, "14 settembre 2026 alle 10:12")
+        self.assertEqual(fine, "14 settembre 2026 alle 13:40")
 
     def test_template_placeholder(self):
         html = report.render_message(
